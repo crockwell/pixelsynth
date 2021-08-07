@@ -1,0 +1,24 @@
+
+# possibly from install
+habitat-lab/
+habitat-sim/
+pytorch3d/
+models/places365/
+
+# pycache
+*.pyc
+__pycache__/
+
+# generated stuff
+debug/
+log/
+output/
+modelcheckpoints/
+models/vqvae2/checkpoint/
+models/vqvae2/embeddings/
+models/lmconv/runs/
+*.pkl
+*.png
+build/
+.vscode/
+*.zip
