@@ -23,7 +23,7 @@ If you use this code for your research, please consider citing:
 ```
 @inProceedings{Rockwell2021,
   author = {Chris Rockwell and David F. Fouhey and Justin Johnson},
-  title = {PixelSynth: Inventing a 3D-Consistent World from a Single Image},
+  title = {PixelSynth: Generating a 3D-Consistent Experience from a Single Image},
   booktitle = {ICCV},
   year = 2021
 }
