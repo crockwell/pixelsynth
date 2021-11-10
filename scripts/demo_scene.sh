@@ -6,4 +6,4 @@ python demo.py \
     --gpu 0,1 --demo_img_name 1011.png \
     --result_folder demo/1011 \
     --temperature=.7 \
-    --num_samples 50 --directions R L U D UL UR DR DL S C --num_split 32 
+    --num_samples 50 --directions R L U D UL UR DR DL S C --num_split 32

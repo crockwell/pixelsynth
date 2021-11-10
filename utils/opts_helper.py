@@ -40,6 +40,8 @@ def opts_helper(test_ops):
         opts.demo_img_name = test_ops.demo_img_name
     if 'dataset' in test_ops:
         opts.dataset = test_ops.dataset
+    if 'sequential_outpainting' in test_ops:
+        opts.sequential_outpainting = test_ops.sequential_outpainting
     opts.homography = test_ops.homography
     opts.no_outpainting = test_ops.no_outpainting
     

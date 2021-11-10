@@ -88,6 +88,9 @@ class ArgumentParser:
             "--normalize_before_residual", action="store_true", default=False
         )
         eval_params.add_argument(
+            "--sequential_outpainting", action="store_true", default=False
+        )
+        eval_params.add_argument(
             "--pretrain", action="store_true", default=False
         )
         eval_params.add_argument(

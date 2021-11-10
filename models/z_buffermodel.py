@@ -201,6 +201,11 @@ class ZbufferModelPts(nn.Module):
 
     def get_rt_from_rot(self, direction, input_RT, num=None, denom=None):
         # we convert to euler angles, modify, then go back to rotation matrix
+
+        # corner case
+        if num is None:
+            num=0
+
         if self.opt.model_setting == 'gen_two_imgs' or self.opt.model_setting == 'gen_scene':
             if direction == 'S':
                 new_output_RT = torch.zeros_like(input_RT).cuda()
@@ -463,66 +468,78 @@ class ZbufferModelPts(nn.Module):
                 best_loss = 0
                 best_img = None
             
-            if last_numerator is not None:
-                current_input_RTinv, current_input_RT = self.get_rt_from_rot(last_direction, input_RT, last_numerator, num_split)
-            else:
-                current_input_RTinv, current_input_RT = input_RTinv, input_RT
-            
-            numerator = num_split
-            current_output_RTinv, current_output_RT = self.get_rt_from_rot(direction, input_RT, numerator, num_split)
-
-            regressed_pts = (
-                    nn.Sigmoid()(self.pts_regressor(current_img))
-                    * (self.opt.max_z - self.opt.min_z)
-                    + self.opt.min_z
-            )
-            
-            if self.opt.use_rgb_features:
-                fs = current_img
-            else:
-                fs = self.encoder(current_img)
+            if not self.opt.sequential_outpainting:
+                if last_numerator is not None:
+                    current_input_RTinv, current_input_RT = self.get_rt_from_rot(last_direction, input_RT, last_numerator, num_split)
+                else:
+                    current_input_RTinv, current_input_RT = input_RTinv, input_RT
                 
-            gen_fs, background_mask, new_point_cloud, new_fs = self.pts_transformer.forward_justpts_cumulative(
-                fs,
-                regressed_pts,
-                K,
-                K_inv,
-                current_input_RT,
-                current_input_RTinv,
-                current_output_RT,
-                current_output_RTinv,
-                prior_point_cloud,
-                fs_old,
-                last_background_mask,
-                last_output_RTinv
-            )
+                numerator = num_split
+                current_output_RTinv, current_output_RT = self.get_rt_from_rot(direction, input_RT, numerator, num_split)
 
-            if not "no_outpainting" in self.opt or not self.opt.no_outpainting:
-                masks_init, masks_undilated, masks_dilated, gen_order = self.get_masks_for_batch(current_output_RT, current_input_RTinv, background_mask)
-                masks = [masks_init, masks_undilated, masks_dilated]
-                downsampled_fs = self.vqvae.encode(gen_fs)[3]
+                regressed_pts = (
+                        nn.Sigmoid()(self.pts_regressor(current_img))
+                        * (self.opt.max_z - self.opt.min_z)
+                        + self.opt.min_z
+                )
                 
-                best_img = self.get_best_sample(gen_order, masks, downsampled_fs, background_mask, gen_fs, netD, input_img)
-            else:
-                best_img = self.projector(gen_fs)
+                if self.opt.use_rgb_features:
+                    fs = current_img
+                else:
+                    fs = self.encoder(current_img)
+                    
+                gen_fs, background_mask, new_point_cloud, new_fs = self.pts_transformer.forward_justpts_cumulative(
+                    fs,
+                    regressed_pts,
+                    K,
+                    K_inv,
+                    current_input_RT,
+                    current_input_RTinv,
+                    current_output_RT,
+                    current_output_RTinv,
+                    prior_point_cloud,
+                    fs_old,
+                    last_background_mask,
+                    last_output_RTinv
+                )
 
-            gen_img = best_img
-            current_img = gen_img
-            prior_point_cloud = new_point_cloud
-            fs_old = new_fs
-            last_background_mask = background_mask
-            last_output_RTinv = current_output_RTinv
-            last_numerator = numerator
-            last_direction = direction
+                if not "no_outpainting" in self.opt or not self.opt.no_outpainting:
+                    masks_init, masks_undilated, masks_dilated, gen_order = self.get_masks_for_batch(current_output_RT, current_input_RTinv, background_mask)
+                    masks = [masks_init, masks_undilated, masks_dilated]
+                    downsampled_fs = self.vqvae.encode(gen_fs)[3]
+                    
+                    best_img = self.get_best_sample(gen_order, masks, downsampled_fs, background_mask, gen_fs, netD, input_img)
+                else:
+                    best_img = self.projector(gen_fs)
 
-            outputs['PredImg_'+direction+'_'+str(num_split)] = gen_img
-            outputs["FeaturesImg_"+direction+'_'+str(num_split)] = gen_fs
-            outputs["PredDepthImg_"+direction+'_'+str(num_split)] = regressed_pts
-            outputs['ForegroundImg_'+direction+'_'+str(num_split)] = (~background_mask).repeat(input_img.shape[0],1,1,1).float()
+                gen_img = best_img
+                current_img = gen_img
+                prior_point_cloud = new_point_cloud
+                fs_old = new_fs
+                last_background_mask = background_mask
+                last_output_RTinv = current_output_RTinv
+                last_numerator = numerator
+                last_direction = direction
+
+                outputs['PredImg_'+direction+'_'+str(num_split)] = gen_img
+                outputs["FeaturesImg_"+direction+'_'+str(num_split)] = gen_fs
+                outputs["PredDepthImg_"+direction+'_'+str(num_split)] = regressed_pts
+                outputs['ForegroundImg_'+direction+'_'+str(num_split)] = (~background_mask).repeat(input_img.shape[0],1,1,1).float()
             
-            for i in reversed(range(0, num_split)):
+                remaining_views = reversed(range(num_split))
+            else:
+                remaining_views = range(num_split+1)
+
+            for i in remaining_views:
                 # we render an image at "0" to visualize input view in videos
-                current_input_RTinv, current_input_RT = self.get_rt_from_rot(direction, input_RT, last_numerator, num_split)
+                if self.opt.sequential_outpainting and i == 0:
+                    # corner case for sequential
+                    if last_numerator is not None:
+                        current_input_RTinv, current_input_RT = self.get_rt_from_rot(last_direction, input_RT, last_numerator, num_split)
+                    else:
+                        current_input_RTinv, current_input_RT = input_RTinv, input_RT
+                else:
+                    current_input_RTinv, current_input_RT = self.get_rt_from_rot(direction, input_RT, last_numerator, num_split)
                 numerator = i
                 current_output_RTinv, current_output_RT = self.get_rt_from_rot(direction, input_RT, numerator, num_split)
                 if self.opt.use_rgb_features:
@@ -559,6 +576,11 @@ class ZbufferModelPts(nn.Module):
                     gen_img = self.projector(gen_fs)
                 outputs['PredImg_'+direction+'_'+str(i)] = gen_img
                 outputs["FeaturesImg_"+direction+'_'+str(i)] = gen_fs                    
+                if self.opt.sequential_outpainting and i == num_split:
+                    outputs["FeaturesImg_"+direction+'_'+str(num_split)] = gen_fs
+                    outputs["PredDepthImg_"+direction+'_'+str(num_split)] = regressed_pts
+                    outputs['ForegroundImg_'+direction+'_'+str(num_split)] = (~background_mask).repeat(input_img.shape[0],1,1,1).float()
+                    last_direction = direction
                 current_img = gen_img
                 prior_point_cloud = new_point_cloud
                 fs_old = new_fs
