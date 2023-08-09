@@ -27,3 +27,7 @@ Additional Arguments:
 - directions: select direction(s) in which to synthesize scene
 - num_split: select number of total images to render in a given direction. 
 E.g. 3 means 2 intermediate images will be synthesized, equally spaced.
+
+#### Example Argument
+
+Check the scripts directory
